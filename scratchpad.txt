@@ -1,10 +1,5 @@
 f().
 c(func_exec).
-Fun1 = fun() -> timer:sleep(1000), io:format("Hello 1~n") end.
-Fun2 = fun() -> timer:sleep(8000), io:format("Hello 2~n") end.
-Funs = [Fun1, Fun2].
-
-
-
-Result = func_exec:execute(Funs).
-io:format("Result: ~p~n", [Result]).
+Spawner = func_exec:initialise(6000).
+SpawnerWithFun1 = func_exec:add_function(Spawner, fun(X) -> timer:sleep(X) end, [5000]).
+func_exec:execute(SpawnerWithFun1).

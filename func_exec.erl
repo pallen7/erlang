@@ -4,16 +4,37 @@
 %% Add an opaque type in here that is a record to control the spawn process
 %% Then we'll pass this state record to and fro
 
-execute(Funs) ->
-    StartTime = erlang:system_time(1000),
-    do_execute(Funs, 0, [], StartTime).
+% todo: sort out the types - add types and type specs:
+-record(state, {
+    function_list = [],
+    timeout
+}).
 
+initialise(Timeout) ->
+    #state{
+        timeout = Timeout
+    }.
+
+add_function(State, Fun, Params) ->
+    State#state{
+        function_list = [{Fun, Params} | State#state.function_list]
+    }.
+
+execute(State) ->
+    StartTime = erlang:system_time(State#state.timeout),
+    do_execute(State#state.function_list, 0, [], StartTime).
+
+
+%%%%%%%%%%%%%%%%%% ------>>>
+%%%% INTERNAL %%%% ------>>>
+%%%%%%%%%%%%%%%%%% ------>>>
 do_execute([], FunCount, PidList, StartTime) ->
     Results = receiver(FunCount, [], PidList, 16000, StartTime),
     io:format("All done. Results ~p~n", [Results]),
     ok;
 
-do_execute([{Fun, Params} | Funs], FunCount, PidList, StartTime) ->
+do_execute([FunAndParams | Funs], FunCount, PidList, StartTime) ->
+    {Fun, Params} = FunAndParams,
     Self = self(),
     FunToSpawn = fun() ->
         Result = erlang:apply(Fun, Params),
@@ -23,6 +44,7 @@ do_execute([{Fun, Params} | Funs], FunCount, PidList, StartTime) ->
     % todo: change to spawn link
     Pid = spawn(FunToSpawn),
     do_execute(Funs, FunCount+1, [Pid|PidList], StartTime).
+
 
 receiver(0, Results, _PidList, _Remaining, _TimeInMs) ->
     io:format("Normal termination~n"),
