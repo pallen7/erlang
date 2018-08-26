@@ -1,18 +1,19 @@
 -module(func_exec).
 -compile(export_all).
 
-% Need to pass in a list of paramaters in the format
-%% [{function1, paramlist1}, {function2, paramlist2}...]
+%% Add an opaque type in here that is a record to control the spawn process
+%% Then we'll pass this state record to and fro
 
 execute(Funs) ->
-    do_execute(Funs, 0, []).
+    StartTime = erlang:system_time(1000),
+    do_execute(Funs, 0, [], StartTime).
 
-do_execute([], FunCount, PidList) ->
-    Results = receiver(FunCount, [], PidList),
+do_execute([], FunCount, PidList, StartTime) ->
+    Results = receiver(FunCount, [], PidList, 16000, StartTime),
     io:format("All done. Results ~p~n", [Results]),
     ok;
 
-do_execute([{Fun, Params} | Funs], FunCount, PidList) ->
+do_execute([{Fun, Params} | Funs], FunCount, PidList, StartTime) ->
     Self = self(),
     FunToSpawn = fun() ->
         Result = erlang:apply(Fun, Params),
@@ -21,26 +22,32 @@ do_execute([{Fun, Params} | Funs], FunCount, PidList) ->
 
     % todo: change to spawn link
     Pid = spawn(FunToSpawn),
-    do_execute(Funs, FunCount+1, [Pid|PidList]).
+    do_execute(Funs, FunCount+1, [Pid|PidList], StartTime).
 
-receiver(0, Results, _PidList) ->
+receiver(0, Results, _PidList, _Remaining, _TimeInMs) ->
     io:format("Normal termination~n"),
     Results;
-receiver(FunCount, Results, PidList) -> 
+receiver(FunCount, Results, PidList, Delay, TimeInMs) -> 
     receive
         {fun_finished, Pid, Result} ->
+
+            DelayRemaining = Delay - (erlang:system_time(1000) - TimeInMs),
+            io:format("DelayRemaining: ~p~n", [DelayRemaining]),
+
             case lists:member(Pid, PidList) of
                 true ->
                     io:format("Function from PidList completed. Pid: ~p Result:~p~n", [Pid, Result]),
-                    receiver(FunCount-1, [Result | Results], PidList);
+                    receiver(FunCount-1, [Result | Results], PidList, DelayRemaining, erlang:system_time(1000));
                 false ->
                     io:format("Function completed not in PidList. Pid: ~p Result:~p~n", [Pid, Result]),
-                    receiver(FunCount, Results, PidList)
+                    receiver(FunCount, Results, PidList, DelayRemaining, erlang:system_time(1000))
             end;
         UnrecognisedMessage ->
+            % Need to calculate delay here too...
+            DelayRemaining = Delay - (erlang:system_time(1000) - TimeInMs),
             io:format("Unrecognised message: ~p~n", [UnrecognisedMessage]),
-            receiver(FunCount, Results, PidList)
-    after 6000 ->
+            receiver(FunCount, Results, PidList, DelayRemaining, erlang:system_time(1000))
+    after Delay ->
         io:format("Terminated~n"),
         timeout
     end.
