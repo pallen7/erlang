@@ -1,7 +1,7 @@
 f().
 c(func_exec).
 Fun1 = fun() -> timer:sleep(1000), io:format("Hello 1~n") end.
-Fun2 = fun() -> timer:sleep(2000), io:format("Hello 2~n") end.
+Fun2 = fun() -> timer:sleep(8000), io:format("Hello 2~n") end.
 Funs = [Fun1, Fun2].
 
 
