@@ -3,3 +3,14 @@ c(func_exec).
 Spawner = func_exec:initialise(6000).
 SpawnerWithFun1 = func_exec:add_function(Spawner, fun(X) -> timer:sleep(X) end, [5000]).
 func_exec:execute(SpawnerWithFun1).
+
+
+Need to add tags to the functions so we can run like the below
+Also need to experiment with fucking the process so it crashes. Will spawn_link suffice?
+
+
+Spawner:Initialise(Time)
+Spawner:AddFunction(FunctionId, Function, Params)
+Spawner:AddFunction(FunctionId, Function, Params)
+Spawner:Execute()
+Spawner:GetResult(FunctionId)
