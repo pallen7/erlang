@@ -1,74 +1,87 @@
 -module(func_exec).
 -compile(export_all).
 
-%% Add an opaque type in here that is a record to control the spawn process
-%% Then we'll pass this state record to and fro
+-define(MILLISECONDS, 1000).
+-define(NOW_IN_MILLISECONDS, erlang:system_time(?MILLISECONDS)).
 
 % todo: sort out the types - add types and type specs:
 -record(state, {
     function_list = [],
-    timeout
+    function_count = 0,
+    timeout,
+    start_time
 }).
+
+% function = {id, fx, [param]}
+% result = {id, result}
 
 initialise(Timeout) ->
     #state{
         timeout = Timeout
     }.
 
-add_function(State, Fun, Params) ->
+add_function(State, Id, Fx, Params) ->
+    NewFunctionCount = State#state.function_count + 1,
     State#state{
-        function_list = [{Fun, Params} | State#state.function_list]
+        function_list = [{Id, Fx, Params} | State#state.function_list],
+        function_count = NewFunctionCount
     }.
 
 execute(State) ->
-    StartTime = erlang:system_time(State#state.timeout),
-    do_execute(State#state.function_list, 0, [], StartTime).
+    StateWithStartTime = State#state{
+        start_time = ?NOW_IN_MILLISECONDS
+    },
+    do_execute(StateWithStartTime, State#state.function_list, []).
+
+get_result(Id, ResultList) ->
+    [Result] = [element(2, Result) || Result <- ResultList, element(1,Result) =:= Id],
+    Result.
 
 
 %%%%%%%%%%%%%%%%%% ------>>>
 %%%% INTERNAL %%%% ------>>>
 %%%%%%%%%%%%%%%%%% ------>>>
-do_execute([], FunCount, PidList, StartTime) ->
-    Results = receiver(FunCount, [], PidList, 16000, StartTime),
-    io:format("All done. Results ~p~n", [Results]),
-    ok;
+do_execute(#state{timeout = Timeout, start_time = StartTime, function_count = Count, function_list = Functions}, [], PidList) ->
+    FunctionIds = [element(1, Function) || Function <- Functions],
+    Results = receiver(Count, [], PidList, FunctionIds, Timeout, StartTime),
+    io:format("All done.~nResults: ~p~n", [Results]),
+    Results;
 
-do_execute([FunAndParams | Funs], FunCount, PidList, StartTime) ->
-    {Fun, Params} = FunAndParams,
+do_execute(State, [Function | FunctionList], PidList) ->
+    {Id, Fx, Params} = Function,
     Self = self(),
     FunToSpawn = fun() ->
-        Result = erlang:apply(Fun, Params),
-        % todo: change signature
-        Self ! {fun_finished, self(), Result} end,
+        Result = erlang:apply(Fx, Params),
+        Self ! {Id, self(), Result} end,
 
     % todo: change to spawn link
-    Pid = spawn(FunToSpawn),
-    do_execute(Funs, FunCount+1, [Pid|PidList], StartTime).
+    Pid = spawn_link(FunToSpawn),
+    do_execute(State, FunctionList, [Pid|PidList]).
 
 
-receiver(0, Results, _PidList, _Remaining, _TimeInMs) ->
+receiver(0, Results, _PidList, _IdList, _Remaining, _LastStartTime) ->
     io:format("Normal termination~n"),
     Results;
-receiver(FunCount, Results, PidList, Delay, TimeInMs) -> 
+receiver(FunCount, Results, PidList, IdList, Delay, LastStartTimeMs) -> 
     receive
-        {fun_finished, Pid, Result} ->
+        {FunctionId, Pid, Result} ->
 
-            DelayRemaining = Delay - (erlang:system_time(1000) - TimeInMs),
+            DelayRemaining = Delay - (?NOW_IN_MILLISECONDS - LastStartTimeMs),
             io:format("DelayRemaining: ~p~n", [DelayRemaining]),
 
-            case lists:member(Pid, PidList) of
+            case lists:member(Pid, PidList) andalso lists:member(FunctionId, IdList) of
                 true ->
                     io:format("Function from PidList completed. Pid: ~p Result:~p~n", [Pid, Result]),
-                    receiver(FunCount-1, [Result | Results], PidList, DelayRemaining, erlang:system_time(1000));
+                    receiver(FunCount-1, [{FunctionId, Result} | Results], PidList, IdList, DelayRemaining, ?NOW_IN_MILLISECONDS);
                 false ->
                     io:format("Function completed not in PidList. Pid: ~p Result:~p~n", [Pid, Result]),
-                    receiver(FunCount, Results, PidList, DelayRemaining, erlang:system_time(1000))
+                    receiver(FunCount, Results, PidList, IdList, DelayRemaining, ?NOW_IN_MILLISECONDS)
             end;
         UnrecognisedMessage ->
             % Need to calculate delay here too...
-            DelayRemaining = Delay - (erlang:system_time(1000) - TimeInMs),
+            DelayRemaining = Delay - (?NOW_IN_MILLISECONDS - LastStartTimeMs),
             io:format("Unrecognised message: ~p~n", [UnrecognisedMessage]),
-            receiver(FunCount, Results, PidList, DelayRemaining, erlang:system_time(1000))
+            receiver(FunCount, Results, PidList, IdList, DelayRemaining, ?NOW_IN_MILLISECONDS)
     after Delay ->
         io:format("Terminated~n"),
         timeout
