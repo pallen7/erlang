@@ -1,0 +1,2 @@
+-module(files).
+-compie(export_all).
