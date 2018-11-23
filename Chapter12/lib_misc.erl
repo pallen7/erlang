@@ -1,5 +1,5 @@
 -module(lib_misc).
--export([sleep/1, flush_buffer/0, priority_receive/0]).
+-export([sleep/1, flush_buffer/0, priority_receive/0, start/2, ring/2]).
 
 sleep(N) ->
     receive
@@ -38,3 +38,12 @@ priority_receive() ->
         end
     end.
     
+start(AnAtom, Fun) ->
+    case whereis(AnAtom) of
+        undefined ->
+            register(AnAtom, spawn(fun() -> Fun() end));
+        _defined ->
+            already_registered
+    end.
+
+

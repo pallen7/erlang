@@ -1,2 +1,2 @@
 f().
-cd("c:/development/study/erlang/Chapter12").
+cd("c:/development/study/erlang/Kent Mooc/MasterClass1").
