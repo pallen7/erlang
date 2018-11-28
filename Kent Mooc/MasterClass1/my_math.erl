@@ -12,7 +12,7 @@
 
 -module(my_math).
 
--export([print/1, evaluate/2, compile/1, execute/2]).
+-export([print/1, evaluate/2, compile/1, execute/2, get_while/2, is_alpha/1, is_number/1, parse/1]).
 
 -type expr() :: {num, integer()}
             |   {var, atom()}
@@ -30,6 +30,44 @@
 -type program() :: [instr()].
 
 -type stack() :: [integer()].
+
+-spec parse(string()) -> {expr(), string()}.
+
+parse([$(|Rest]) ->                                         %% First parentheses
+    {LeftExpression, [Operator|Rest1]} = parse(Rest),       %% Left expression followed by operator
+    {RightExpression, [$)|Rest2]} = parse(Rest1),           %% Right expression (and remove rhs parentheses)
+    Expression =
+        case Operator of
+            $+ -> {add, LeftExpression, RightExpression};
+            $* -> {mul, LeftExpression, RightExpression}
+        end,
+    {Expression, Rest2};
+
+parse([C|Rest]) when $a =< C andalso C =< $z ->
+    {String, Rest1} = get_while(fun is_alpha/1, Rest),
+    {{var, list_to_atom([C|String])}, Rest1};
+
+parse([C|Rest]) when ($0 =< C andalso C =< $9) orelse C =:= $- ->
+    {String, Rest1} = get_while(fun is_number/1, Rest),
+    {{num, list_to_integer([C|String])}, Rest1}.
+
+-spec get_while(fun((T) -> boolean()), [T]) -> {[T], [T]}.
+
+get_while(Pred, [C|Rest]) ->
+    case Pred(C) of
+        true ->
+            {Match, NonMatch} = get_while(Pred, Rest),
+            {[C|Match], NonMatch};
+        false ->
+            {[], [C|Rest]}
+    end;
+
+get_while(_Pred, []) ->
+    {[],[]}.
+
+
+is_alpha(C) -> $a =< C andalso C =< $z.
+is_number(C) -> $0 =< C andalso C =< $9.
 
 % Pretty Print - take an expression and convert to a string
 -spec print(expr()) -> string().
